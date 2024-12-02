@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
 
     const day1 = b.addExecutable(.{
         .name = "aoc",
-        .root_source_file = b.path("src/day1.zig"),
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -27,7 +27,7 @@ pub fn build(b: *std.Build) void {
     const run_cmd_inputs = b.addRunArtifact(get_inputs);
     run_cmd.step.dependOn(b.getInstallStep());
 
-    const run_step = b.step("day1", "Run puzzle day1");
+    const run_step = b.step("run", "Run all solutions");
     run_step.dependOn(&run_cmd.step);
 
     const run_step_inputs = b.step("get_inputs", "Get inputs for the day");
