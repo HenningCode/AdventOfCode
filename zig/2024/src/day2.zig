@@ -30,71 +30,61 @@ fn problem(data: []const u8, dampener: bool, allocator: std.mem.Allocator) !usiz
         }
 
         var inc: bool = true;
+        var valid: bool = undefined;
 
-        const len: i32 = @intCast(number_list.items.len);
-        const sum: i32 = sumArray(number_list);
+        // Brute force increasing or decreasing list
+        for (0..2) |_| {
+            inc = !inc;
+            valid = true;
 
-        if (@divFloor(sum, len) < number_list.items[0] or @divFloor(sum, len) < number_list.items[1]) {
-            inc = false;
-        }
+            var i: usize = 0;
+            var retry_flag = false;
 
-        var valid: bool = true;
+            var temp_list = try number_list.clone();
+            defer temp_list.deinit();
 
-        var i: usize = 0;
-        var retry_flag = false;
-        while (i < (number_list.items.len - 1)) {
-            var difference: i32 = 0;
-            if (inc) {
-                difference = number_list.items[i + 1] - number_list.items[i];
-            } else {
-                difference = number_list.items[i] - number_list.items[i + 1];
-            }
+            while (i < (temp_list.items.len - 1)) {
+                var difference: i32 = 0;
 
-            if (difference > 3 or difference < 1) {
-                if (dampener and !retry_flag) {
-                    retry_flag = true;
+                if (inc) {
+                    difference = temp_list.items[i + 1] - temp_list.items[i];
+                } else {
+                    difference = temp_list.items[i] - temp_list.items[i + 1];
+                }
 
-                    // If the first element is already wrong just remove it and
-                    // try again witht the next values
-                    if (i == 0) {
-                        _ = number_list.orderedRemove(i);
+                if (difference > 3 or difference < 1) {
+                    if (dampener and !retry_flag) {
+                        retry_flag = true;
+
+                        // Case if last element is wrong its working
+                        if ((i + 2) >= temp_list.items.len) break;
+
+                        if (i == 0) {
+                            // If the first element is already wrong just remove it and
+                            // try again witht the next values
+                            _ = temp_list.orderedRemove(i);
+                        } else {
+                            // remove the wrong element and retry
+                            _ = temp_list.orderedRemove(i + 1);
+                        }
+
+                        // Dont increase i to retry on the current value without the wrong value
                         continue;
-                    }
-                    // Case if last element is wrong
-                    if ((i + 2) >= number_list.items.len) break;
-
-                    if (inc) {
-                        difference = number_list.items[i + 2] - number_list.items[i];
                     } else {
-                        difference = number_list.items[i] - number_list.items[i + 2];
-                    }
-
-                    if (difference < 1 or difference > 3) {
                         valid = false;
                         break;
                     }
-
-                    _ = number_list.orderedRemove(i + 1);
-                } else {
-                    valid = false;
                 }
+                i += 1;
             }
-            i += 1;
-        }
-        if (valid) {
-            result += 1;
+            if (valid) {
+                result += 1;
+                break;
+            }
         }
     }
 
     return result;
-}
-
-fn sumArray(array: std.ArrayList(i32)) i32 {
-    var sum: i32 = 0;
-    for (array.items) |x| {
-        sum += x;
-    }
-    return sum;
 }
 
 test "Problem 1" {
@@ -126,6 +116,7 @@ test "Problem 3" {
     const input_2 =
         \\47 51 54 57 60 62
         \\47 51 55 57 60 62
+        \\6 2 3 4 5 6
     ;
-    try std.testing.expectEqual(1, problem(input_2, true, std.testing.allocator));
+    try std.testing.expectEqual(2, problem(input_2, true, std.testing.allocator));
 }
