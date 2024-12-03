@@ -4,19 +4,9 @@
 const std = @import("std");
 
 pub fn solution() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    var file = try std.fs.cwd().openFile("inputs/input1.txt", .{});
-    defer file.close();
-    const file_size = (try file.stat()).size;
-    const file_contents = try file.reader().readAllAlloc(allocator, file_size);
-    defer allocator.free(file_contents);
-
     std.debug.print("Day1\n", .{});
-    std.debug.print("Solution Problem 1: {d}\n", .{try problem1(file_contents, 1000)});
-    std.debug.print("Solution Problem 2: {d}\n", .{try problem2(file_contents, 1000)});
+    std.debug.print("Solution Problem 1: {d}\n", .{try problem1(@embedFile("inputs/input1.txt"), 1000)});
+    std.debug.print("Solution Problem 2: {d}\n", .{try problem2(@embedFile("inputs/input1.txt"), 1000)});
 }
 
 fn problem1(data: []const u8, comptime array_size: usize) !u32 {

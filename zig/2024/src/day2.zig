@@ -5,15 +5,9 @@ pub fn solution() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    var file = try std.fs.cwd().openFile("inputs/input2.txt", .{});
-    defer file.close();
-    const file_size = (try file.stat()).size;
-    const file_contents = try file.reader().readAllAlloc(allocator, file_size);
-    defer allocator.free(file_contents);
-
     std.debug.print("Day2\n", .{});
-    std.debug.print("Solution Problem 1: {d}\n", .{try problem(file_contents, false, allocator)});
-    std.debug.print("Solution Problem 2: {d}\n", .{try problem(file_contents, true, allocator)});
+    std.debug.print("Solution Problem 1: {d}\n", .{try problem(@embedFile("inputs/input2.txt"), false, allocator)});
+    std.debug.print("Solution Problem 2: {d}\n", .{try problem(@embedFile("inputs/input2.txt"), true, allocator)});
 }
 
 fn problem(data: []const u8, dampener: bool, allocator: std.mem.Allocator) !usize {
