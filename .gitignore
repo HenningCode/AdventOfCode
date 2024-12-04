@@ -4,3 +4,4 @@
 zig-out/
 .zig-cache/
 inputs/
+zig/2024/src/cookie.zig
