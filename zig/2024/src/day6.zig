@@ -1,8 +1,10 @@
 const std = @import("std");
 const ArrList = std.ArrayList(u8);
 
-const PointSet = std.AutoHashMapUnmanaged(Point, void);
-const OrientedPoint = std.meta.Tuple(.{ Point, Direction });
+const PointSet = std.AutoArrayHashMapUnmanaged(Point, void);
+const OrientedPoint = struct { Point, Direction };
+const OrientedPointSet = std.AutoHashMapUnmanaged(OrientedPoint, void);
+const StartCondition = struct { Guard, PointSet };
 
 const Direction = enum {
     up,
@@ -33,14 +35,14 @@ const Point = struct {
     fn neighbor(self: Self, direction: Direction) Self {
         switch (direction) {
             .up => return self.add(.{ .x = 0, .y = -1 }),
-            .down => return self.add(.{ .x = 0, .y = -1 }),
+            .down => return self.add(.{ .x = 0, .y = 1 }),
             .left => return self.add(.{ .x = -1, .y = 0 }),
             .right => return self.add(.{ .x = 1, .y = 0 }),
         }
     }
 
     fn isInBounds(self: Self, bound: Self) bool {
-        return (self.x >= 0 and self.y >= 0 and self.y < bound.x and self.y < bound.y);
+        return (self.x >= 0 and self.y >= 0 and self.x < bound.x and self.y < bound.y);
     }
 };
 
@@ -51,13 +53,12 @@ const Guard = struct {
 
     const Self = @This();
 
-    fn move(self: Self, obstacle: PointSet) ?OrientedPoint {
+    fn move(self: *Self, obstacle: PointSet) ?OrientedPoint {
         const peek = self.position.neighbor(self.direction);
-
-        if (!self.position.isInBounds(peek)) {
+        if (!peek.isInBounds(self.area)) {
             return null;
         } else if (obstacle.contains(peek)) {
-            self.direction.next();
+            self.direction = self.direction.next();
         } else {
             self.position = peek;
         }
@@ -66,208 +67,86 @@ const Guard = struct {
     }
 };
 
-    fn init(data: []const u8, alloc: std.mem.Allocator)   {
+fn init(data: []const u8, alloc: std.mem.Allocator) !StartCondition {
+    var obstacles: PointSet = .empty;
+    var guard: ?Point = null;
 
-        var lines = std.mem.tokenizeAny(u8, data, "\n\r");
-        while (lines.next()) |line| {
-            len = line.len;
-            for (line) |char| {
-                if (char == 'X') {
-
-                }
+    var lines = std.mem.tokenizeAny(u8, data, "\n\r");
+    var y: i32 = 0;
+    var x: i32 = 0;
+    while (lines.next()) |line| {
+        x = @intCast(line.len);
+        for (line, 0..) |char, i| {
+            if (char == '#') {
+                try obstacles.put(alloc, .{ .x = @intCast(i), .y = y }, {});
+            } else if (char == '^') {
+                guard = .{ .x = @intCast(i), .y = y };
             }
         }
-
-        return .{
-            .data = arr,
-            .row_len = len,
-            .alloc = alloc,
-        };
+        y += 1;
     }
 
-const Grid = struct {
-    data: ArrList,
-    rows: usize,
-    row_len: usize,
-    start_x: usize,
-    start_y: usize,
-    alloc: std.mem.Allocator,
+    return .{
+        Guard{
+            .position = guard.?,
+            .direction = Direction.up,
+            .area = .{ .x = x, .y = y },
+        },
+        obstacles,
+    };
+}
 
-    const Self = @This();
+fn part1(alloc: std.mem.Allocator, guard: Guard, obstacles: PointSet) !u32 {
+    var visited: PointSet = .empty;
+    defer visited.deinit(alloc);
+    var patrol = guard;
 
-
-    fn deinit(self: Self) void {
-        self.data.deinit();
+    while (patrol.move(obstacles)) |pos| {
+        try visited.put(alloc, pos[0], {});
     }
 
-    fn move(self: Self, grid: []u8, x: *usize, y: *usize, dir: *Direction) void {
-        switch (dir.*) {
-            .up => {
-                if (grid[self.row_len * (y.* - 1) + x.*] == '#') {
-                    x.* += 1;
-                } else {
-                    y.* -= 1;
-                }
-            },
-            .down => {
-                if (grid[self.row_len * (y.* + 1) + x.*] == '#') {
-                    x.* -= 1;
-                } else {
-                    y.* += 1;
-                }
-            },
-            .left => {
-                if (grid[self.row_len * y.* + x.* - 1] == '#') {
-                    y.* -= 1;
-                } else {
-                    x.* -= 1;
-                }
-            },
-            .right => {
-                if (grid[self.row_len * y.* + x.* + 1] == '#') {
-                    y.* += 1;
-                } else {
-                    x.* += 1;
-                }
-            },
-        }
+    return @intCast(visited.count());
+}
+
+fn part2(alloc: std.mem.Allocator, guard: Guard, obstacles: PointSet) !u32 {
+    var new_obstacles: PointSet = .empty;
+    defer new_obstacles.deinit(alloc);
+
+    var loops: u32 = 0;
+    var patrol = guard;
+    const start_pos: OrientedPoint = .{ patrol.position, patrol.direction };
+
+    while (patrol.move(obstacles)) |pos| {
+        try new_obstacles.put(alloc, pos[0], {});
     }
+    // remove the start position
+    _ = new_obstacles.orderedRemove(start_pos[0]);
 
-    fn part1(self: Self) !u32 {
-        const data_clone = try self.data.clone();
-        defer data_clone.deinit();
-        const data = data_clone.items;
-        const rows = self.rows;
-        const row_len = self.row_len;
-
-        var x: usize = self.start_x;
-        var y: usize = self.start_y;
-        var result: u32 = 1;
-        var dir: Direction = .up;
-
-        while (true) {
-            if (x == row_len - 1 or y == rows - 1 or x == 0 or y == 0) {
-                break;
-            }
-
-            self.move(data, &x, &y, &dir);
-
-            if (!(data[row_len * y + x] == 'X')) {
-                data[row_len * y + x] = 'X';
-                result += 1;
-            }
-        }
-
-        return result;
-    }
-
-    fn part2(self: Self) !u32 {
-        const data_clone = try self.data.clone();
-        defer data_clone.deinit();
-        const data = data_clone.items;
-        const rows = self.rows;
-        const row_len = self.row_len;
-
-        var x = self.start_x;
-        var y = self.start_y;
-        var result: u32 = 0;
-        var dir: Direction = .up;
-
-        var obstacles = std.ArrayList(Point).init(self.alloc);
-        defer obstacles.deinit();
-
-        while (true) {
-            self.move(data, &x, &y, &dir);
-            if (x == row_len - 1 or y == rows - 1 or x == 0 or y == 0) {
-                break;
-            }
-            const cur_pos = Point{ .x = x, .y = y };
-
-            var found = false;
-            for (obstacles.items) |pos| {
-                if (pos.equal(cur_pos)) {
-                    found = true;
-                }
-            }
-            if (!found) {
-                try obstacles.append(cur_pos);
-            }
-        }
-
-        for (obstacles.items) |pos| {
-            if (pos.equal(Point{
-                .x = self.start_x,
-                .y = self.start_y,
-            })) {
-                continue;
-            }
-            const obstruction_data = try self.data.clone();
-            defer obstruction_data.deinit();
-            obstruction_data.items[row_len * pos.y + pos.x] = '#';
-
-            if (try self.checkIfLoop(obstruction_data.items, self.start_x, self.start_y, Direction.up)) {
-                result += 1;
-            }
-        }
-
-        return result;
-    }
-
-    fn checkIfLoop(self: Self, grid: []u8, start_x: usize, start_y: usize, start_dir: Direction) !bool {
-        var x = start_x;
-        var y = start_y;
-        var dir = start_dir;
-        const rows = self.rows;
-        const row_len = self.row_len;
-
-        const Pos = struct {
-            x: usize,
-            y: usize,
-            dir: Direction,
-
-            fn equal(this: @This(), other: @This()) bool {
-                if (this.x == other.x and this.y == other.y and this.dir == other.dir) {
-                    return true;
-                }
-                return false;
-            }
+    for (new_obstacles.keys()) |new_obstacle| {
+        var alt_guard = Guard{
+            .position = start_pos[0],
+            .direction = Direction.up,
+            .area = guard.area,
         };
 
-        var positions = std.ArrayList(Pos).init(self.alloc);
-        defer positions.deinit();
-        // std.debug.print("----------------------------------------------------------------------\n", .{});
-        // std.debug.print("START\n", .{});
-        // printGrid(grid, rows, row_len);
+        var alt_obs = try obstacles.clone(alloc);
+        try alt_obs.put(alloc, new_obstacle, {});
+        defer alt_obs.deinit(alloc);
 
-        while (true) {
-            const current_pos = Pos{
-                .x = x,
-                .y = y,
-                .dir = dir,
-            };
+        var visited: OrientedPointSet = .empty;
+        defer visited.deinit(alloc);
 
-            self.move(grid, &x, &y, &dir);
-            grid[row_len * y + x] = 'X';
-
-            // a postion was reached with same direction again
-            for (positions.items) |pos| {
-                if (pos.equal(current_pos)) {
-                    // std.debug.print("END\n", .{});
-                    // printGrid(grid, rows, row_len);
-                    // std.debug.print("----------------------------------------------------------------------\n", .{});
-                    return true;
-                }
+        while (alt_guard.move(alt_obs)) |pos| {
+            if (visited.contains(pos)) {
+                loops += 1;
+                break;
             }
-
-            // The guard found an escape
-            if (x == row_len - 1 or y == rows - 1 or x == 0 or y == 0) {
-                return false;
-            }
-
-            try positions.append(current_pos);
+            try visited.put(alloc, pos, {});
         }
     }
-};
+
+    return loops;
+}
 
 pub fn solution() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -275,13 +154,12 @@ pub fn solution() !void {
     const alloc = gpa.allocator();
 
     const file = @embedFile("inputs/input6.txt");
-    const data = try Grid.init(file, alloc);
-    defer data.deinit();
+    const guard, var obstacles = try init(file, alloc);
+    defer obstacles.deinit(alloc);
 
     std.debug.print("Day6\n", .{});
-
-    std.debug.print("Solution Problem 1: {d}\n", .{try data.part1()});
-    std.debug.print("Solution Problem 2: {d}\n", .{try data.part2()});
+    std.debug.print("Solution Problem 1: {d}\n", .{try part1(alloc, guard, obstacles)});
+    std.debug.print("Solution Problem 2: {d}\n", .{try part2(alloc, guard, obstacles)});
 }
 
 const test_alloc = std.testing.allocator;
@@ -300,10 +178,9 @@ test "Example input part1" {
         \\......#...
     ;
 
-    const data = try Grid.init(string, test_alloc);
-    defer data.deinit();
-
-    try std.testing.expectEqual(41, data.part1());
+    const guard, var obstacles = try init(string, test_alloc);
+    defer obstacles.deinit(test_alloc);
+    try std.testing.expectEqual(41, part1(test_alloc, guard, obstacles));
 }
 
 test "Example input part2" {
@@ -319,15 +196,13 @@ test "Example input part2" {
         \\#.........
         \\......#...
     ;
-
-    const data = try Grid.init(string, test_alloc);
-    defer data.deinit();
-
-    try std.testing.expectEqual(6, data.part2());
+    const guard, var obstacles = try init(string, test_alloc);
+    defer obstacles.deinit(test_alloc);
+    try std.testing.expectEqual(6, part2(test_alloc, guard, obstacles));
 }
 
 test "Bruh" {
-    const sample =
+    const string =
         \\..#.............
         \\..............#.
         \\...#............
@@ -337,9 +212,7 @@ test "Bruh" {
         \\................
         \\..^.............
     ;
-    const data = try Grid.init(sample, test_alloc);
-
-    defer data.deinit();
-
-    try std.testing.expectEqual(1, data.part2());
+    const guard, var obstacles = try init(string, test_alloc);
+    defer obstacles.deinit(test_alloc);
+    try std.testing.expectEqual(1, part2(test_alloc, guard, obstacles));
 }
