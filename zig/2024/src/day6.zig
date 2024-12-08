@@ -1,22 +1,89 @@
 const std = @import("std");
 const ArrList = std.ArrayList(u8);
 
+const PointSet = std.AutoHashMapUnmanaged(Point, void);
+const OrientedPoint = std.meta.Tuple(.{ Point, Direction });
+
 const Direction = enum {
     up,
     down,
     left,
     right,
+
+    fn next(self: @This()) Direction {
+        switch (self) {
+            .up => return .right,
+            .down => return .left,
+            .left => return .up,
+            .right => return .down,
+        }
+    }
 };
 
-fn printGrid(grid: []u8, rows: usize, row_len: usize) void {
-    for (0..rows) |j| {
-        for (0..row_len) |i| {
-            std.debug.print("{c}", .{grid[j * row_len + i]});
-        }
-        std.debug.print("\n", .{});
+const Point = struct {
+    x: i32,
+    y: i32,
+
+    const Self = @This();
+
+    fn add(self: Self, other: Self) Self {
+        return .{ .x = self.x + other.x, .y = self.y + other.y };
     }
-    std.debug.print("\n", .{});
-}
+
+    fn neighbor(self: Self, direction: Direction) Self {
+        switch (direction) {
+            .up => return self.add(.{ .x = 0, .y = -1 }),
+            .down => return self.add(.{ .x = 0, .y = -1 }),
+            .left => return self.add(.{ .x = -1, .y = 0 }),
+            .right => return self.add(.{ .x = 1, .y = 0 }),
+        }
+    }
+
+    fn isInBounds(self: Self, bound: Self) bool {
+        return (self.x >= 0 and self.y >= 0 and self.y < bound.x and self.y < bound.y);
+    }
+};
+
+const Guard = struct {
+    position: Point,
+    direction: Direction,
+    area: Point,
+
+    const Self = @This();
+
+    fn move(self: Self, obstacle: PointSet) ?OrientedPoint {
+        const peek = self.position.neighbor(self.direction);
+
+        if (!self.position.isInBounds(peek)) {
+            return null;
+        } else if (obstacle.contains(peek)) {
+            self.direction.next();
+        } else {
+            self.position = peek;
+        }
+
+        return .{ self.position, self.direction };
+    }
+};
+
+    fn init(data: []const u8, alloc: std.mem.Allocator)   {
+
+        var lines = std.mem.tokenizeAny(u8, data, "\n\r");
+        while (lines.next()) |line| {
+            len = line.len;
+            for (line) |char| {
+                if (char == 'X') {
+
+                }
+            }
+        }
+
+        return .{
+            .data = arr,
+            .row_len = len,
+            .alloc = alloc,
+        };
+    }
 
 const Grid = struct {
     data: ArrList,
@@ -28,40 +95,6 @@ const Grid = struct {
 
     const Self = @This();
 
-    fn init(data: []const u8, alloc: std.mem.Allocator) !Self {
-        var arr = ArrList.init(alloc);
-        var len: usize = 0;
-
-        var lines = std.mem.tokenizeAny(u8, data, "\n\r");
-        while (lines.next()) |line| {
-            len = line.len;
-            for (line) |char| {
-                try arr.append(char);
-            }
-        }
-
-        var x: usize = 0;
-        var y: usize = 0;
-        const rows = arr.items.len / len;
-        outer_loop: for (0..rows) |j| {
-            for (0..rows) |i| {
-                if (arr.items[j * len + i] == '^') {
-                    x = i;
-                    y = j;
-                    arr.items[y * len + x] = 'X';
-                    break :outer_loop;
-                }
-            }
-        }
-        return .{
-            .data = arr,
-            .rows = rows,
-            .row_len = len,
-            .start_x = x,
-            .start_y = y,
-            .alloc = alloc,
-        };
-    }
 
     fn deinit(self: Self) void {
         self.data.deinit();
@@ -70,57 +103,29 @@ const Grid = struct {
     fn move(self: Self, grid: []u8, x: *usize, y: *usize, dir: *Direction) void {
         switch (dir.*) {
             .up => {
-                if (grid[self.row_len * (y.* - 1) + x.*] == '#' or grid[self.row_len * (y.* - 1) + x.*] == 'O') {
-                    // Needed if there are two obstacles next to each other
-                    if (grid[self.row_len * y.* + x.* + 1] == '#' or grid[self.row_len * y.* + x.* + 1] == 'O') {
-                        y.* += 1;
-                        dir.* = .down;
-                    } else {
-                        x.* += 1;
-                        dir.* = .right;
-                    }
+                if (grid[self.row_len * (y.* - 1) + x.*] == '#') {
+                    x.* += 1;
                 } else {
                     y.* -= 1;
                 }
             },
             .down => {
-                if (grid[self.row_len * (y.* + 1) + x.*] == '#' or grid[self.row_len * (y.* + 1) + x.*] == 'O') {
-                    // Needed if there are two obstacles next to each other
-                    if (grid[self.row_len * y.* + x.* - 1] == '#' or grid[self.row_len * y.* + x.* - 1] == 'O') {
-                        y.* -= 1;
-                        dir.* = .up;
-                    } else {
-                        x.* -= 1;
-                        dir.* = .left;
-                    }
+                if (grid[self.row_len * (y.* + 1) + x.*] == '#') {
+                    x.* -= 1;
                 } else {
                     y.* += 1;
                 }
             },
             .left => {
-                if (grid[self.row_len * y.* + x.* - 1] == '#' or grid[self.row_len * y.* + x.* - 1] == 'O') {
-                    // Needed if there are two obstacles next to each other
-                    if (grid[self.row_len * (y.* - 1) + x.*] == '#' or grid[self.row_len * (y.* - 1) + x.*] == 'O') {
-                        x.* += 1;
-                        dir.* = .right;
-                    } else {
-                        y.* -= 1;
-                        dir.* = .up;
-                    }
+                if (grid[self.row_len * y.* + x.* - 1] == '#') {
+                    y.* -= 1;
                 } else {
                     x.* -= 1;
                 }
             },
             .right => {
-                if (grid[self.row_len * y.* + x.* + 1] == '#' or grid[self.row_len * y.* + x.* + 1] == 'O') {
-                    // Needed if there are two obstacles next to each other
-                    if (grid[self.row_len * (y.* + 1) + x.*] == '#' or grid[self.row_len * (y.* + 1) + x.*] == 'O') {
-                        x.* -= 1;
-                        dir.* = .left;
-                    } else {
-                        y.* += 1;
-                        dir.* = .down;
-                    }
+                if (grid[self.row_len * y.* + x.* + 1] == '#') {
+                    y.* += 1;
                 } else {
                     x.* += 1;
                 }
@@ -168,39 +173,41 @@ const Grid = struct {
         var result: u32 = 0;
         var dir: Direction = .up;
 
+        var obstacles = std.ArrayList(Point).init(self.alloc);
+        defer obstacles.deinit();
+
         while (true) {
-            // check if left the grid
+            self.move(data, &x, &y, &dir);
             if (x == row_len - 1 or y == rows - 1 or x == 0 or y == 0) {
                 break;
             }
+            const cur_pos = Point{ .x = x, .y = y };
 
-            // Place and try the obstacle
+            var found = false;
+            for (obstacles.items) |pos| {
+                if (pos.equal(cur_pos)) {
+                    found = true;
+                }
+            }
+            if (!found) {
+                try obstacles.append(cur_pos);
+            }
+        }
+
+        for (obstacles.items) |pos| {
+            if (pos.equal(Point{
+                .x = self.start_x,
+                .y = self.start_y,
+            })) {
+                continue;
+            }
             const obstruction_data = try self.data.clone();
             defer obstruction_data.deinit();
+            obstruction_data.items[row_len * pos.y + pos.x] = '#';
 
-            obstruction_data.items[row_len * self.start_y + self.start_x] = '.';
-            obstruction_data.items[row_len * y + x] = 'X';
-            switch (dir) {
-                .up => {
-                    obstruction_data.items[row_len * (y - 1) + x] = 'O';
-                },
-                .down => {
-                    obstruction_data.items[row_len * (y + 1) + x] = 'O';
-                },
-                .left => {
-                    obstruction_data.items[row_len * y + x - 1] = 'O';
-                },
-                .right => {
-                    obstruction_data.items[row_len * y + x + 1] = 'O';
-                },
-            }
-
-            if (try self.checkIfLoop(obstruction_data.items, x, y, dir)) {
+            if (try self.checkIfLoop(obstruction_data.items, self.start_x, self.start_y, Direction.up)) {
                 result += 1;
             }
-
-            // move ahead
-            self.move(data, &x, &y, &dir);
         }
 
         return result;
@@ -228,6 +235,9 @@ const Grid = struct {
 
         var positions = std.ArrayList(Pos).init(self.alloc);
         defer positions.deinit();
+        // std.debug.print("----------------------------------------------------------------------\n", .{});
+        // std.debug.print("START\n", .{});
+        // printGrid(grid, rows, row_len);
 
         while (true) {
             const current_pos = Pos{
@@ -242,6 +252,9 @@ const Grid = struct {
             // a postion was reached with same direction again
             for (positions.items) |pos| {
                 if (pos.equal(current_pos)) {
+                    // std.debug.print("END\n", .{});
+                    // printGrid(grid, rows, row_len);
+                    // std.debug.print("----------------------------------------------------------------------\n", .{});
                     return true;
                 }
             }
@@ -311,4 +324,22 @@ test "Example input part2" {
     defer data.deinit();
 
     try std.testing.expectEqual(6, data.part2());
+}
+
+test "Bruh" {
+    const sample =
+        \\..#.............
+        \\..............#.
+        \\...#............
+        \\........#.......
+        \\................
+        \\.......#.....#..
+        \\................
+        \\..^.............
+    ;
+    const data = try Grid.init(sample, test_alloc);
+
+    defer data.deinit();
+
+    try std.testing.expectEqual(1, data.part2());
 }
